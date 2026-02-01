@@ -28,7 +28,6 @@ struct AppState {
 
 pub enum GamePacket {
     ClientCommand { id: u32, cmd: ClientCommand },
-    PlayerJoin { id: u32 },
     PlayerLeave { id: u32 },
 }
 
@@ -77,8 +76,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     let (mut sender, mut receiver) = socket.split();
 
-    // 1. Send Join event to ECS
-    let _ = state.tx.send(GamePacket::PlayerJoin { id });
+    // 1. Send Join event to ECS - REMOVED (Client must send Join command)
+    // let _ = state.tx.send(GamePacket::PlayerJoin { id });
 
     // 2. Subscribe to broadcasts
     let mut rx = state.broadcast_tx.subscribe();

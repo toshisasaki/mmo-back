@@ -21,6 +21,7 @@ struct NetworkSender(broadcast::Sender<String>);
 #[derive(Component)]
 struct Player {
     id: u32,
+    name: String,
     position: Vec2,
 }
 
@@ -84,23 +85,10 @@ fn handle_packets(
     mut commands: Commands,
     receiver: Res<NetworkReceiver>,
     mut players: Query<(Entity, &mut Player)>, 
+    sender: Res<NetworkSender>,
 ) {
     while let Ok(packet) = receiver.0.try_recv() {
         match packet {
-            GamePacket::PlayerJoin { id } => {
-                println!("Spawning player {}", id);
-                commands.spawn((
-                    Player {
-                        id,
-                        position: Vec2::new(400.0, 300.0), // Center
-                    },
-                    Health {
-                        current: 100.0,
-                        max: 100.0,
-                    }
-                ));
-            }
-
             GamePacket::PlayerLeave { id } => {
                 println!("Despawning player {}", id);
                 for (entity, player) in players.iter() {
@@ -108,15 +96,51 @@ fn handle_packets(
                         commands.entity(entity).despawn();
                     }
                 }
+                let _ = sender.0.send(serde_json::to_string(&ServerEvent::PlayerLeft { id }).unwrap());
             }
             
             GamePacket::ClientCommand { id, cmd } => {
                 match cmd {
+                    ClientCommand::Join { name } => {
+                        println!("Player {} joined as {}", id, name);
+                        // Check if player already exists?
+                        let exists = players.iter().any(|(_, p)| p.id == id);
+                        if !exists {
+                             let pos = Vec2::new(400.0, 300.0);
+                             commands.spawn((
+                                Player {
+                                    id,
+                                    name: name.clone(),
+                                    position: pos, // Center
+                                },
+                                Health {
+                                    current: 100.0,
+                                    max: 100.0,
+                                }
+                            ));
+                            
+                            let _ = sender.0.send(serde_json::to_string(&ServerEvent::PlayerJoined { 
+                                id, 
+                                name, 
+                                position: pos 
+                            }).unwrap());
+                        }
+                    }
+                    ClientCommand::Chat { text } => {
+                        println!("Chat from {}: {}", id, text);
+                         let _ = sender.0.send(serde_json::to_string(&ServerEvent::Chat { 
+                            id, 
+                            text 
+                        }).unwrap());
+                    }
                     ClientCommand::Move { dir } => {
                         for (_, mut player) in players.iter_mut() {
                             if player.id == id {
                                 let speed = 5.0; 
                                 player.position += dir * speed;
+                                // Simple Clamp
+                                player.position.x = player.position.x.clamp(0.0, 800.0);
+                                player.position.y = player.position.y.clamp(0.0, 600.0);
                             }
                         }
                     }
@@ -135,7 +159,7 @@ fn handle_packets(
                              }
                          }
                     }
-                    _ => {}
+
                 }
             }
         }
@@ -190,6 +214,7 @@ fn broadcast_state(
 ) {
     let player_states: Vec<SharedPlayerState> = players.iter().map(|(p, h)| SharedPlayerState {
         id: p.id,
+        name: p.name.clone(),
         position: p.position,
         health: h.current,
         max_health: h.max,
@@ -203,6 +228,8 @@ fn broadcast_state(
         position: p.position,
     }).collect();
 
+    // Always send snapshot if there are players, so they get updates even if standing still?
+    // Optimization: only if changed? But UDP/WS usually just spams snapshots.
     if player_states.is_empty() && projectile_states.is_empty() {
         return;
     }
