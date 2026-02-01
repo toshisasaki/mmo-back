@@ -1,0 +1,1 @@
+/mnt/c/Users/ander/Documents/github/mmo-back/target/debug/server: /mnt/c/Users/ander/Documents/github/mmo-back/crates/server/src/main.rs /mnt/c/Users/ander/Documents/github/mmo-back/crates/server/src/ws.rs /mnt/c/Users/ander/Documents/github/mmo-back/crates/shared/src/lib.rs
